@@ -339,44 +339,73 @@ export interface ClientProgram {
 
 export async function getClientProgram(clientId: string): Promise<ClientProgram | null> {
   const supabase = await createClient();
-  const { data } = await supabase
+
+  // Deliberately flat, sequential queries rather than one deep nested
+  // PostgREST embed (program_assignments -> programs -> workout_days ->
+  // exercises) — a 3-level embed relying on RLS exists-subqueries at every
+  // level turned out to unreliably return nothing even when the data and
+  // policies were correct, so each step below is its own simple, RLS-checked
+  // query, matching the pattern the rest of this file already uses.
+  const { data: assignment, error: assignmentError } = await supabase
     .from("program_assignments")
-    .select("start_date, programs(name, description, week_label, workout_days(id, day_label, day_index, exercises(*)))")
+    .select("program_id")
     .eq("client_id", clientId)
     .order("start_date", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (assignmentError) console.error("getClientProgram: assignment lookup failed", assignmentError);
+  if (!assignment) return null;
 
-  const program = data?.programs as unknown as
-    | { name: string; description: string; week_label: string; workout_days: EditableDayRow[] }
-    | null
-    | undefined;
-
+  const { data: program, error: programError } = await supabase
+    .from("programs")
+    .select("name, description, week_label")
+    .eq("id", assignment.program_id)
+    .maybeSingle();
+  if (programError) console.error("getClientProgram: program lookup failed", programError);
   if (!program) return null;
 
-  const days = (program.workout_days ?? [])
-    .slice()
-    .sort((a, b) => a.day_index - b.day_index)
-    .map((d) => ({
-      id: d.id,
-      day_label: d.day_label,
-      exercises: (d.exercises as unknown as EditableExerciseRow[])
-        .slice()
-        .sort((a, b) => a.order_index - b.order_index)
-        .map((e) => ({
-          id: e.id,
-          name: e.name,
-          muscle_group: e.muscle_group,
-          target_sets: e.target_sets,
-          target_reps: e.target_reps,
-          target_rpe: e.target_rpe,
-        })),
-    }));
+  const { data: days, error: daysError } = await supabase
+    .from("workout_days")
+    .select("id, day_label, day_index")
+    .eq("program_id", assignment.program_id)
+    .order("day_index", { ascending: true });
+  if (daysError) console.error("getClientProgram: workout_days lookup failed", daysError);
+
+  const dayIds = (days ?? []).map((d) => d.id);
+  let exercises: EditableExerciseRow[] = [];
+  if (dayIds.length > 0) {
+    const { data: exerciseRows, error: exercisesError } = await supabase
+      .from("exercises")
+      .select("*")
+      .in("workout_day_id", dayIds)
+      .order("order_index", { ascending: true });
+    if (exercisesError) console.error("getClientProgram: exercises lookup failed", exercisesError);
+    exercises = (exerciseRows as (EditableExerciseRow & { workout_day_id: string })[] | null) ?? [];
+  }
+
+  const exercisesByDay = new Map<string, ClientProgramExercise[]>();
+  exercises.forEach((e) => {
+    const workoutDayId = (e as unknown as { workout_day_id: string }).workout_day_id;
+    const list = exercisesByDay.get(workoutDayId) ?? [];
+    list.push({
+      id: e.id,
+      name: e.name,
+      muscle_group: e.muscle_group,
+      target_sets: e.target_sets,
+      target_reps: e.target_reps,
+      target_rpe: e.target_rpe,
+    });
+    exercisesByDay.set(workoutDayId, list);
+  });
 
   return {
     name: program.name,
     description: program.description,
     week_label: program.week_label,
-    days,
+    days: (days ?? []).map((d) => ({
+      id: d.id,
+      day_label: d.day_label,
+      exercises: exercisesByDay.get(d.id) ?? [],
+    })),
   };
 }
