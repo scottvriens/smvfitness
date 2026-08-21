@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   type LucideIcon,
-  ArrowLeftRight,
+  LogOut,
   Sun,
   Dumbbell,
   ClipboardCheck,
@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import clsx from "clsx";
+import { createClient } from "@/lib/supabase/client";
 
 // Icons are resolved by name inside this Client Component rather than
 // accepted as component references, since Server Component layouts can't
@@ -37,19 +38,23 @@ export function AppShell({
   userName,
   avatarInitials,
   roleLabel,
-  switchHref,
-  switchLabel,
   children,
 }: {
   navItems: NavItem[];
   userName: string;
   avatarInitials: string;
   roleLabel: string;
-  switchHref: string;
-  switchLabel: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-cream)] md:flex-row">
@@ -65,21 +70,20 @@ export function AppShell({
           userName={userName}
           avatarInitials={avatarInitials}
           roleLabel={roleLabel}
-          switchHref={switchHref}
-          switchLabel={switchLabel}
+          onSignOut={handleSignOut}
         />
       </aside>
 
       {/* Mobile top bar */}
       <header className="flex items-center justify-between border-b border-[var(--color-taupe)] bg-[var(--color-cream-soft)] px-4 py-3 md:hidden">
         <Brand compact />
-        <Link
-          href={switchHref}
+        <button
+          onClick={handleSignOut}
           className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-olive-deep)] shadow-sm"
         >
-          <ArrowLeftRight size={13} />
-          {switchLabel}
-        </Link>
+          <LogOut size={13} />
+          Sign out
+        </button>
       </header>
 
       <main className="flex-1 px-4 pb-24 pt-5 md:px-8 md:pb-10 md:pt-8">
@@ -148,14 +152,12 @@ function SidebarFooter({
   userName,
   avatarInitials,
   roleLabel,
-  switchHref,
-  switchLabel,
+  onSignOut,
 }: {
   userName: string;
   avatarInitials: string;
   roleLabel: string;
-  switchHref: string;
-  switchLabel: string;
+  onSignOut: () => void;
 }) {
   return (
     <div className="mt-6 space-y-3 border-t border-[var(--color-taupe)] pt-4">
@@ -168,13 +170,13 @@ function SidebarFooter({
           <p className="text-[11px] text-[var(--color-charcoal)]/50">{roleLabel}</p>
         </div>
       </div>
-      <Link
-        href={switchHref}
-        className="flex items-center justify-center gap-1.5 rounded-lg border border-[var(--color-taupe)] bg-white px-3 py-2 text-xs font-medium text-[var(--color-olive-deep)] transition-colors hover:bg-[var(--color-taupe-soft)]"
+      <button
+        onClick={onSignOut}
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--color-taupe)] bg-white px-3 py-2 text-xs font-medium text-[var(--color-olive-deep)] transition-colors hover:bg-[var(--color-taupe-soft)]"
       >
-        <ArrowLeftRight size={13} />
-        {switchLabel}
-      </Link>
+        <LogOut size={13} />
+        Sign out
+      </button>
     </div>
   );
 }

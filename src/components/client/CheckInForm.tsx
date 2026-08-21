@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeading } from "@/components/ui/Card";
 import { CheckCircle2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 const scaleQuestions = [
   { id: "energy", label: "Energy levels this week" },
@@ -10,7 +12,8 @@ const scaleQuestions = [
   { id: "adherence", label: "Nutrition & training adherence" },
 ];
 
-export function CheckInForm() {
+export function CheckInForm({ clientId }: { clientId: string }) {
+  const router = useRouter();
   const [weight, setWeight] = useState("");
   const [scales, setScales] = useState<Record<string, number>>({
     energy: 3,
@@ -19,6 +22,8 @@ export function CheckInForm() {
   });
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (submitted) {
     return (
@@ -27,7 +32,7 @@ export function CheckInForm() {
         <div>
           <p className="text-sm font-semibold text-[var(--color-charcoal)]">Check-in submitted</p>
           <p className="mt-1 text-xs text-[var(--color-charcoal)]/55">
-            Scott will review it and get back to you here soon.
+            Your coach will review it and get back to you here soon.
           </p>
         </div>
       </Card>
@@ -39,9 +44,26 @@ export function CheckInForm() {
       <CardHeading title="This week's check-in" subtitle="Takes about two minutes" />
       <form
         className="space-y-5"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
+          setSaving(true);
+          setError(null);
+
+          const supabase = createClient();
+          const { error: insertError } = await supabase.from("checkin_submissions").insert({
+            client_id: clientId,
+            date: new Date().toISOString().slice(0, 10),
+            weight_kg: Number(weight),
+            answers: { ...scales, notes },
+          });
+
+          setSaving(false);
+          if (insertError) {
+            setError(insertError.message);
+            return;
+          }
           setSubmitted(true);
+          router.refresh();
         }}
       >
         <div>
@@ -98,11 +120,18 @@ export function CheckInForm() {
           steps.
         </div>
 
+        {error && (
+          <p className="rounded-lg bg-[var(--color-clay)]/15 px-3 py-2 text-xs text-[var(--color-clay-deep)]">
+            {error}
+          </p>
+        )}
+
         <button
           type="submit"
-          className="w-full rounded-xl bg-[var(--color-sage)] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          disabled={saving}
+          className="w-full rounded-xl bg-[var(--color-sage)] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
         >
-          Submit check-in
+          {saving ? "Saving..." : "Submit check-in"}
         </button>
       </form>
     </Card>

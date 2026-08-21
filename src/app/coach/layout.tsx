@@ -1,17 +1,17 @@
 import { AppShell, type NavItem } from "@/components/layout/AppShell";
-import { coachUser } from "@/lib/mock-data";
+import { requireProfile } from "@/lib/auth";
 
 const navItems: NavItem[] = [{ href: "/coach/dashboard", label: "Dashboard", icon: "LayoutDashboard" }];
 
-export default function CoachLayout({ children }: LayoutProps<"/coach">) {
+export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
+  const profile = await requireProfile("coach");
+
   return (
     <AppShell
       navItems={navItems}
-      userName={coachUser.name}
-      avatarInitials={coachUser.avatarInitials}
+      userName={profile.name}
+      avatarInitials={profile.avatar_initials}
       roleLabel="Coach"
-      switchHref="/client/today"
-      switchLabel="View as client"
     >
       {children}
     </AppShell>

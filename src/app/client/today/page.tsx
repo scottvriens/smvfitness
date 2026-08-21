@@ -4,17 +4,30 @@ import { Card, CardHeading } from "@/components/ui/Card";
 import { StatTile } from "@/components/ui/StatTile";
 import { Badge } from "@/components/ui/Badge";
 import { HabitChecklist } from "@/components/client/HabitChecklist";
-import { currentClient, currentProgram, todaysHabits, nutritionTargets } from "@/lib/mock-data";
+import { currentProgram } from "@/lib/mock-data";
+import { requireProfile } from "@/lib/auth";
+import { getTodayHabits, getNutritionTargets } from "@/lib/data";
 
-export default function TodayPage() {
+export default async function TodayPage() {
+  const profile = await requireProfile("client");
+  const [habits, targets] = await Promise.all([
+    getTodayHabits(profile.id),
+    getNutritionTargets(profile.id),
+  ]);
+
   const todaysWorkout = currentProgram.days[0];
+  const today = new Date().toLocaleDateString("en-AU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm text-[var(--color-charcoal)]/55">Thursday, August 20</p>
+        <p className="text-sm text-[var(--color-charcoal)]/55">{today}</p>
         <h1 className="text-2xl font-semibold text-[var(--color-charcoal)]">
-          Morning, {currentClient.name.split(" ")[0]}
+          Morning, {profile.name.split(" ")[0]}
         </h1>
       </div>
 
@@ -44,21 +57,30 @@ export default function TodayPage() {
           {todaysWorkout.dayLabel}
           <ChevronRight size={15} />
         </Link>
+        <p className="mt-3 text-xs text-[var(--color-charcoal)]/40">
+          Program building isn&apos;t wired up to your account yet — this is still a sample
+          program.
+        </p>
       </Card>
 
-      <HabitChecklist habits={todaysHabits} />
+      <HabitChecklist habits={habits} />
 
       <Card>
         <CardHeading title="Nutrition targets" subtitle="Set by your coach" />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Calories" value={`${nutritionTargets.calories}`} icon={Flame} accent="var(--color-clay-deep)" />
-          <StatTile label="Protein" value={`${nutritionTargets.proteinG}g`} icon={Beef} />
-          <StatTile label="Carbs" value={`${nutritionTargets.carbsG}g`} icon={Wheat} accent="var(--color-clay)" />
-          <StatTile label="Fat" value={`${nutritionTargets.fatG}g`} icon={Droplet} accent="var(--color-sage-deep)" />
-        </div>
+        {targets ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile label="Calories" value={`${targets.calories}`} icon={Flame} accent="var(--color-clay-deep)" />
+            <StatTile label="Protein" value={`${targets.protein_g}g`} icon={Beef} />
+            <StatTile label="Carbs" value={`${targets.carbs_g}g`} icon={Wheat} accent="var(--color-clay)" />
+            <StatTile label="Fat" value={`${targets.fat_g}g`} icon={Droplet} accent="var(--color-sage-deep)" />
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-charcoal)]/55">
+            No targets set yet — your coach hasn&apos;t added these.
+          </p>
+        )}
         <p className="mt-3 text-xs text-[var(--color-charcoal)]/45">
-          Food logging and MyFitnessPal sync land in a later phase — for now, targets are set
-          here by your coach.
+          Food logging and MyFitnessPal sync land in a later phase.
         </p>
       </Card>
     </div>

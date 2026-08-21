@@ -4,19 +4,19 @@ import { StatTile } from "@/components/ui/StatTile";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { clientRoster } from "@/lib/mock-data";
-import type { ClientSummary } from "@/lib/types";
+import { requireProfile } from "@/lib/auth";
+import { getClientRoster } from "@/lib/data";
 
-const statusConfig: Record<
-  ClientSummary["checkInStatus"],
-  { label: string; tone: "sage" | "clay" | "neutral" }
-> = {
-  reviewed: { label: "Reviewed", tone: "sage" },
-  "needs-review": { label: "Needs review", tone: "clay" },
-  overdue: { label: "Overdue", tone: "neutral" },
+const statusConfig = {
+  reviewed: { label: "Reviewed", tone: "sage" as const },
+  "needs-review": { label: "Needs review", tone: "clay" as const },
+  overdue: { label: "Overdue", tone: "neutral" as const },
 };
 
-export default function CoachDashboardPage() {
+export default async function CoachDashboardPage() {
+  await requireProfile("coach");
+  const clientRoster = await getClientRoster();
+
   const needsReview = clientRoster.filter((c) => c.checkInStatus === "needs-review").length;
   const overdue = clientRoster.filter((c) => c.checkInStatus === "overdue").length;
 
@@ -45,48 +45,57 @@ export default function CoachDashboardPage() {
         />
       </div>
 
-      <div className="space-y-3">
-        {clientRoster.map((client) => {
-          const status = statusConfig[client.checkInStatus];
-          return (
-            <Link key={client.id} href={`/coach/clients/${client.id}`}>
-              <Card className="transition-shadow hover:shadow-md">
-                <div className="flex items-center gap-3.5">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--color-clay)]/20 text-sm font-semibold text-[var(--color-clay-deep)]">
-                    {client.avatarInitials}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-semibold text-[var(--color-charcoal)]">
-                        {client.name}
-                      </p>
-                      <Badge tone={status.tone}>{status.label}</Badge>
+      {clientRoster.length === 0 ? (
+        <Card>
+          <p className="text-sm text-[var(--color-charcoal)]/55">
+            No clients yet. Once someone signs up with their own email (not yours), they&apos;ll
+            show up here automatically as a client.
+          </p>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {clientRoster.map((client) => {
+            const status = statusConfig[client.checkInStatus];
+            return (
+              <Link key={client.id} href={`/coach/clients/${client.id}`}>
+                <Card className="transition-shadow hover:shadow-md">
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--color-clay)]/20 text-sm font-semibold text-[var(--color-clay-deep)]">
+                      {client.avatarInitials}
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-[var(--color-charcoal)]/50">
-                      {client.program} · last check-in{" "}
-                      {client.lastCheckIn
-                        ? new Date(client.lastCheckIn).toLocaleDateString("en-AU", {
-                            day: "numeric",
-                            month: "short",
-                          })
-                        : "—"}
-                    </p>
-                    <div className="mt-2.5 flex items-center gap-2.5">
-                      <div className="w-28">
-                        <ProgressBar value={client.habitAdherence} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-[var(--color-charcoal)]">
+                          {client.name}
+                        </p>
+                        <Badge tone={status.tone}>{status.label}</Badge>
                       </div>
-                      <span className="text-[11px] text-[var(--color-charcoal)]/50">
-                        {client.habitAdherence}% adherence
-                      </span>
+                      <p className="mt-0.5 truncate text-xs text-[var(--color-charcoal)]/50">
+                        last check-in{" "}
+                        {client.lastCheckIn
+                          ? new Date(client.lastCheckIn).toLocaleDateString("en-AU", {
+                              day: "numeric",
+                              month: "short",
+                            })
+                          : "never"}
+                      </p>
+                      <div className="mt-2.5 flex items-center gap-2.5">
+                        <div className="w-28">
+                          <ProgressBar value={client.habitAdherence} />
+                        </div>
+                        <span className="text-[11px] text-[var(--color-charcoal)]/50">
+                          {client.habitAdherence}% adherence
+                        </span>
+                      </div>
                     </div>
+                    <ChevronRight className="shrink-0 text-[var(--color-charcoal)]/30" size={18} />
                   </div>
-                  <ChevronRight className="shrink-0 text-[var(--color-charcoal)]/30" size={18} />
-                </div>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

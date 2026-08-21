@@ -1,5 +1,5 @@
 import { AppShell, type NavItem } from "@/components/layout/AppShell";
-import { currentClient } from "@/lib/mock-data";
+import { requireProfile } from "@/lib/auth";
 
 const navItems: NavItem[] = [
   { href: "/client/today", label: "Today", icon: "Sun" },
@@ -9,15 +9,15 @@ const navItems: NavItem[] = [
   { href: "/client/messages", label: "Messages", icon: "MessageCircle" },
 ];
 
-export default function ClientLayout({ children }: LayoutProps<"/client">) {
+export default async function ClientLayout({ children }: LayoutProps<"/client">) {
+  const profile = await requireProfile("client");
+
   return (
     <AppShell
       navItems={navItems}
-      userName={currentClient.name}
-      avatarInitials={currentClient.avatarInitials}
+      userName={profile.name}
+      avatarInitials={profile.avatar_initials}
       roleLabel="Client"
-      switchHref="/coach/dashboard"
-      switchLabel="View as coach"
     >
       {children}
     </AppShell>

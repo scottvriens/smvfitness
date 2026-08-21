@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Check, Beef, Moon, Footprints, GlassWater, Ban, type LucideIcon } from "lucide-react";
-import type { Habit } from "@/lib/types";
 import { Card, CardHeading } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { createClient } from "@/lib/supabase/client";
 
 const iconMap: Record<string, LucideIcon> = {
   Beef,
@@ -14,18 +14,53 @@ const iconMap: Record<string, LucideIcon> = {
   Ban,
 };
 
-export function HabitChecklist({ habits }: { habits: Habit[] }) {
-  const [completed, setCompleted] = useState<Set<string>>(new Set());
+export interface TodayHabit {
+  id: string;
+  name: string;
+  icon: string;
+  completedToday: boolean;
+}
 
-  const toggle = (id: string) => {
+export function HabitChecklist({ habits }: { habits: TodayHabit[] }) {
+  const [completed, setCompleted] = useState<Set<string>>(
+    new Set(habits.filter((h) => h.completedToday).map((h) => h.id))
+  );
+  const [, startTransition] = useTransition();
+
+  const toggle = (habitId: string) => {
+    const willBeCompleted = !completed.has(habitId);
+
+    // Optimistic update — flip it in the UI immediately, save in the background.
     setCompleted((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      willBeCompleted ? next.add(habitId) : next.delete(habitId);
       return next;
+    });
+
+    startTransition(async () => {
+      const supabase = createClient();
+      const today = new Date().toISOString().slice(0, 10);
+      await supabase
+        .from("habit_logs")
+        .upsert(
+          { habit_id: habitId, date: today, completed: willBeCompleted },
+          { onConflict: "habit_id,date" }
+        );
     });
   };
 
-  const pct = habits.length ? Math.round((completed.size / habits.length) * 100) : 0;
+  if (habits.length === 0) {
+    return (
+      <Card>
+        <CardHeading title="Today's habits" />
+        <p className="text-sm text-[var(--color-charcoal)]/55">
+          No habits set up yet — your coach adds these for you.
+        </p>
+      </Card>
+    );
+  }
+
+  const pct = Math.round((completed.size / habits.length) * 100);
 
   return (
     <Card>
