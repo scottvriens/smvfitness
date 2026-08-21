@@ -2,18 +2,20 @@
 
 import { useState } from "react";
 import { Check } from "lucide-react";
-import type { Program } from "@/lib/types";
 import { Card, CardHeading } from "@/components/ui/Card";
 import clsx from "clsx";
+import type { ClientProgramDay, ClientProgramExercise } from "@/lib/data";
 
-export function ProgramView({ program }: { program: Program }) {
+export function ProgramView({ days }: { days: ClientProgramDay[] }) {
   const [activeDay, setActiveDay] = useState(0);
-  const day = program.days[activeDay];
+  const day = days[activeDay];
+
+  if (!day) return null;
 
   return (
     <div className="space-y-4">
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {program.days.map((d, i) => (
+        {days.map((d, i) => (
           <button
             key={d.id}
             onClick={() => setActiveDay(i)}
@@ -24,30 +26,30 @@ export function ProgramView({ program }: { program: Program }) {
                 : "bg-white text-[var(--color-charcoal)]/65 border border-[var(--color-taupe)]"
             )}
           >
-            {d.dayLabel.split("—")[0].trim()}
+            {d.day_label.split("—")[0].trim()}
           </button>
         ))}
       </div>
 
       <Card>
-        <CardHeading title={day.dayLabel} subtitle={`${day.exercises.length} exercises`} />
-        <div className="space-y-4">
-          {day.exercises.map((ex) => (
-            <ExerciseLogger key={ex.id} exercise={ex} />
-          ))}
-        </div>
+        <CardHeading title={day.day_label} subtitle={`${day.exercises.length} exercises`} />
+        {day.exercises.length === 0 ? (
+          <p className="text-sm text-[var(--color-charcoal)]/55">No exercises added to this day yet.</p>
+        ) : (
+          <div className="space-y-4">
+            {day.exercises.map((ex) => (
+              <ExerciseLogger key={ex.id} exercise={ex} />
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );
 }
 
-function ExerciseLogger({
-  exercise,
-}: {
-  exercise: Program["days"][number]["exercises"][number];
-}) {
+function ExerciseLogger({ exercise }: { exercise: ClientProgramExercise }) {
   const [setsDone, setSetsDone] = useState<boolean[]>(
-    Array.from({ length: exercise.targetSets }, () => false)
+    Array.from({ length: exercise.target_sets }, () => false)
   );
 
   const toggleSet = (idx: number) => {
@@ -60,8 +62,8 @@ function ExerciseLogger({
         <div>
           <p className="text-sm font-semibold text-[var(--color-charcoal)]">{exercise.name}</p>
           <p className="text-xs text-[var(--color-charcoal)]/50">
-            {exercise.muscleGroup} · target {exercise.targetSets} × {exercise.targetReps}
-            {exercise.targetRpe ? ` @ RPE ${exercise.targetRpe}` : ""}
+            {exercise.muscle_group} · target {exercise.target_sets} × {exercise.target_reps}
+            {exercise.target_rpe ? ` @ RPE ${exercise.target_rpe}` : ""}
           </p>
         </div>
       </div>

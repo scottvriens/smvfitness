@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Dumbbell } from "lucide-react";
 import { Card, CardHeading } from "@/components/ui/Card";
 import { WeightChart } from "@/components/client/WeightChart";
 import { CheckInReviewList } from "@/components/coach/CheckInReviewList";
@@ -13,7 +13,7 @@ export default async function ClientDetailPage(props: PageProps<"/coach/clients/
   const detail = await getClientDetailForCoach(id);
   if (!detail) notFound();
 
-  const { profile, weightHistory, checkIns, habitAdherence, habitCount } = detail;
+  const { profile, weightHistory, checkIns, habitAdherence, habitCount, assignedProgram } = detail;
 
   return (
     <div className="space-y-6">
@@ -33,6 +33,31 @@ export default async function ClientDetailPage(props: PageProps<"/coach/clients/
           <h1 className="text-xl font-semibold text-[var(--color-charcoal)]">{profile.name}</h1>
         </div>
       </div>
+
+      <Card>
+        <CardHeading
+          title="Training program"
+          action={
+            <Link
+              href={assignedProgram ? `/coach/programs/${assignedProgram.id}` : "/coach/programs"}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--color-taupe)] px-3 py-1.5 text-xs font-medium text-[var(--color-olive-deep)] hover:bg-[var(--color-taupe-soft)]"
+            >
+              <Dumbbell size={13} />
+              {assignedProgram ? "View / edit" : "Assign a program"}
+            </Link>
+          }
+        />
+        {assignedProgram ? (
+          <div>
+            <p className="text-sm font-medium text-[var(--color-charcoal)]">{assignedProgram.name}</p>
+            {assignedProgram.week_label && (
+              <p className="mt-0.5 text-xs text-[var(--color-charcoal)]/50">{assignedProgram.week_label}</p>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-charcoal)]/55">No program assigned yet.</p>
+        )}
+      </Card>
 
       <Card>
         <CardHeading title="Bodyweight trend" />
