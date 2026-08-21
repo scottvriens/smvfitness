@@ -25,6 +25,13 @@ export async function createClient() {
           }
         },
       },
+      global: {
+        // Next.js patches the global fetch() and, unless told otherwise,
+        // can cache identical GET requests across requests/deployments —
+        // including the REST calls Supabase makes under the hood. Every
+        // query here needs live data, so opt every one of them out.
+        fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+      },
     }
   );
 }
