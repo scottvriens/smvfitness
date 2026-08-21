@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+:root {
+  /* SMV Fitness brand palette */
+  --color-cream: #f5f1e8;
+  --color-cream-soft: #ede7d8;
+  --color-sage: #a8b29a;
+  --color-sage-light: #b5bfa1;
+  --color-sage-deep: #8a9a7e;
+  --color-olive-deep: #556b5d;
+  --color-taupe: #d9cbb8;
+  --color-taupe-soft: #e6dcc9;
+  --color-clay: #b08968;
+  --color-clay-deep: #a67c52;
+  --color-charcoal: #2b2b2b;
+
+  --background: var(--color-cream);
+  --foreground: var(--color-charcoal);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-cream: var(--color-cream);
+  --color-cream-soft: var(--color-cream-soft);
+  --color-sage: var(--color-sage);
+  --color-sage-light: var(--color-sage-light);
+  --color-sage-deep: var(--color-sage-deep);
+  --color-olive-deep: var(--color-olive-deep);
+  --color-taupe: var(--color-taupe);
+  --color-taupe-soft: var(--color-taupe-soft);
+  --color-clay: var(--color-clay);
+  --color-clay-deep: var(--color-clay-deep);
+  --color-charcoal: var(--color-charcoal);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: var(--color-sage-light);
+  color: var(--color-charcoal);
+}
