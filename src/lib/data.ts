@@ -346,22 +346,25 @@ export async function getClientProgram(clientId: string): Promise<ClientProgram 
   // level turned out to unreliably return nothing even when the data and
   // policies were correct, so each step below is its own simple, RLS-checked
   // query, matching the pattern the rest of this file already uses.
-  const { data: assignment, error: assignmentError } = await supabase
+  // Plain selects only, sorted/picked in JS — chaining .order()/.limit()/
+  // .maybeSingle() onto this specific query was silently coming back empty
+  // even with correct data and RLS, so we stick to the simplest possible
+  // query shape here rather than trust the fancier chain.
+  const { data: assignments, error: assignmentError } = await supabase
     .from("program_assignments")
-    .select("program_id")
-    .eq("client_id", clientId)
-    .order("start_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .select("program_id, start_date")
+    .eq("client_id", clientId);
   if (assignmentError) console.error("getClientProgram: assignment lookup failed", assignmentError);
-  if (!assignment) return null;
+  if (!assignments || assignments.length === 0) return null;
 
-  const { data: program, error: programError } = await supabase
+  const assignment = assignments.slice().sort((a, b) => (a.start_date < b.start_date ? 1 : -1))[0];
+
+  const { data: programs, error: programError } = await supabase
     .from("programs")
     .select("name, description, week_label")
-    .eq("id", assignment.program_id)
-    .maybeSingle();
+    .eq("id", assignment.program_id);
   if (programError) console.error("getClientProgram: program lookup failed", programError);
+  const program = programs?.[0];
   if (!program) return null;
 
   const { data: days, error: daysError } = await supabase
