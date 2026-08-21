@@ -14,6 +14,7 @@ interface EditableExercise {
   targetSets: number;
   targetReps: string;
   targetRpe: string;
+  restSeconds: string;
 }
 
 interface EditableDay {
@@ -30,6 +31,7 @@ function newExercise(): EditableExercise {
     targetSets: 3,
     targetReps: "8-10",
     targetRpe: "",
+    restSeconds: "90",
   };
 }
 
@@ -66,6 +68,7 @@ export function ProgramEditor({
             targetSets: e.target_sets,
             targetReps: e.target_reps,
             targetRpe: e.target_rpe ?? "",
+            restSeconds: e.rest_seconds != null ? String(e.rest_seconds) : "",
           })),
         }))
       : [newDay(0)]
@@ -173,6 +176,7 @@ export function ProgramEditor({
             target_sets: e.targetSets || 1,
             target_reps: e.targetReps.trim(),
             target_rpe: e.targetRpe.trim() || null,
+            rest_seconds: e.restSeconds.trim() ? Number(e.restSeconds.trim()) || null : null,
             order_index: exIdx,
           }));
       });
@@ -270,13 +274,13 @@ export function ProgramEditor({
                     value={ex.name}
                     onChange={(e) => updateExercise(day.key, ex.key, { name: e.target.value })}
                     placeholder="Exercise name"
-                    className="col-span-12 rounded-lg border border-[var(--color-taupe)] bg-white px-2.5 py-1.5 text-sm outline-none focus:border-[var(--color-sage)] sm:col-span-4"
+                    className="col-span-12 rounded-lg border border-[var(--color-taupe)] bg-white px-2.5 py-1.5 text-sm outline-none focus:border-[var(--color-sage)] sm:col-span-3"
                   />
                   <input
                     value={ex.muscleGroup}
                     onChange={(e) => updateExercise(day.key, ex.key, { muscleGroup: e.target.value })}
                     placeholder="Muscle group"
-                    className="col-span-6 rounded-lg border border-[var(--color-taupe)] bg-white px-2.5 py-1.5 text-sm outline-none focus:border-[var(--color-sage)] sm:col-span-3"
+                    className="col-span-6 rounded-lg border border-[var(--color-taupe)] bg-white px-2.5 py-1.5 text-sm outline-none focus:border-[var(--color-sage)] sm:col-span-2"
                   />
                   <input
                     type="number"
@@ -299,6 +303,16 @@ export function ProgramEditor({
                     onChange={(e) => updateExercise(day.key, ex.key, { targetRpe: e.target.value })}
                     placeholder="RPE"
                     className="col-span-4 rounded-lg border border-[var(--color-taupe)] bg-white px-2.5 py-1.5 text-sm outline-none focus:border-[var(--color-sage)] sm:col-span-1"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    step={5}
+                    value={ex.restSeconds}
+                    onChange={(e) => updateExercise(day.key, ex.key, { restSeconds: e.target.value })}
+                    placeholder="Rest (sec)"
+                    title="Rest between sets, in seconds"
+                    className="col-span-4 rounded-lg border border-[var(--color-taupe)] bg-white px-2.5 py-1.5 text-sm outline-none focus:border-[var(--color-sage)] sm:col-span-2"
                   />
                   <button
                     onClick={() => removeExercise(day.key, ex.key)}

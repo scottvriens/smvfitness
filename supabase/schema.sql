@@ -78,6 +78,7 @@ create table if not exists exercises (
   target_sets int not null default 3,
   target_reps text not null default '',
   target_rpe text,
+  rest_seconds int,
   order_index int not null default 0
 );
 
@@ -100,6 +101,12 @@ create table if not exists workout_logs (
   exercise_logs jsonb not null default '[]',
   completed boolean not null default false
 );
+
+-- Lets the app upsert "today's log for this workout day" in one call instead
+-- of a separate select-then-insert-or-update round trip.
+alter table workout_logs drop constraint if exists workout_logs_client_day_date_unique;
+alter table workout_logs add constraint workout_logs_client_day_date_unique
+  unique (client_id, workout_day_id, date);
 
 create table if not exists habits (
   id uuid primary key default gen_random_uuid(),

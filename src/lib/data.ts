@@ -245,6 +245,7 @@ export interface EditableExerciseRow {
   target_sets: number;
   target_reps: string;
   target_rpe: string | null;
+  rest_seconds: number | null;
   order_index: number;
 }
 
@@ -322,6 +323,7 @@ export interface ClientProgramExercise {
   target_sets: number;
   target_reps: string;
   target_rpe: string | null;
+  rest_seconds: number | null;
 }
 
 export interface ClientProgramDay {
@@ -397,6 +399,7 @@ export async function getClientProgram(clientId: string): Promise<ClientProgram 
       target_sets: e.target_sets,
       target_reps: e.target_reps,
       target_rpe: e.target_rpe,
+      rest_seconds: e.rest_seconds,
     });
     exercisesByDay.set(workoutDayId, list);
   });
@@ -411,4 +414,86 @@ export async function getClientProgram(clientId: string): Promise<ClientProgram 
       exercises: exercisesByDay.get(d.id) ?? [],
     })),
   };
+}
+
+// ------------------------------------------------------ Weight logging
+export interface LoggedSet {
+  weight_kg: number | null;
+  reps: number | null;
+}
+
+export interface LoggedExercise {
+  exercise_id: string;
+  exercise_name: string;
+  sets: LoggedSet[];
+}
+
+export interface PreviousExerciseResult {
+  date: string;
+  sets: LoggedSet[];
+}
+
+// "What did you lift last time" — matched by exercise NAME rather than by
+// program/day id, so this keeps working even after the coach edits a
+// program (swaps an exercise, tweaks a day) instead of resetting history
+// every time the underlying workout_day/exercise rows get recreated.
+export async function getPreviousExerciseWeights(
+  clientId: string,
+  exerciseNames: string[]
+): Promise<Record<string, PreviousExerciseResult>> {
+  const uniqueNames = Array.from(new Set(exerciseNames));
+  if (uniqueNames.length === 0) return {};
+
+  const supabase = await createClient();
+  const { data: logs, error } = await supabase
+    .from("workout_logs")
+    .select("date, exercise_logs")
+    .eq("client_id", clientId)
+    .lt("date", todayISO())
+    .order("date", { ascending: false })
+    .limit(30);
+  if (error) console.error("getPreviousExerciseWeights: lookup failed", error);
+
+  const remaining = new Set(uniqueNames);
+  const result: Record<string, PreviousExerciseResult> = {};
+
+  for (const log of logs ?? []) {
+    if (remaining.size === 0) break;
+    const entries = (log.exercise_logs as LoggedExercise[] | null) ?? [];
+    for (const entry of entries) {
+      if (remaining.has(entry.exercise_name)) {
+        result[entry.exercise_name] = { date: log.date, sets: entry.sets ?? [] };
+        remaining.delete(entry.exercise_name);
+      }
+    }
+  }
+
+  return result;
+}
+
+// Any workouts this client has already logged today, keyed by workout day —
+// lets the page prefill inputs if they started (or already finished) a
+// session earlier the same day rather than showing blank fields again.
+export async function getTodayWorkoutLogs(
+  clientId: string,
+  workoutDayIds: string[]
+): Promise<Record<string, LoggedExercise[]>> {
+  if (workoutDayIds.length === 0) return {};
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("workout_logs")
+    .select("workout_day_id, exercise_logs")
+    .eq("client_id", clientId)
+    .eq("date", todayISO())
+    .in("workout_day_id", workoutDayIds);
+  if (error) console.error("getTodayWorkoutLogs: lookup failed", error);
+
+  const map: Record<string, LoggedExercise[]> = {};
+  (data ?? []).forEach((row) => {
+    if (row.workout_day_id) {
+      map[row.workout_day_id] = (row.exercise_logs as LoggedExercise[] | null) ?? [];
+    }
+  });
+  return map;
 }
