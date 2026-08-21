@@ -194,7 +194,7 @@ drop policy if exists "programs_all_coach" on programs;
 create policy "programs_all_coach" on programs for all using (is_coach()) with check (is_coach());
 drop policy if exists "programs_select_client" on programs;
 create policy "programs_select_client" on programs for select
-  using (exists (select 1 from program_assignments pa where pa.program_id = id and pa.client_id = auth.uid()));
+  using (exists (select 1 from program_assignments pa where pa.program_id = programs.id and pa.client_id = auth.uid()));
 
 drop policy if exists "workout_days_all_coach" on workout_days;
 create policy "workout_days_all_coach" on workout_days for all using (is_coach()) with check (is_coach());
