@@ -154,6 +154,25 @@ export async function getClientRoster() {
   return roster;
 }
 
+// ------------------------------------------------------- Coach: habits
+export interface CoachHabit {
+  id: string;
+  name: string;
+  icon: string;
+  active: boolean;
+}
+
+export async function getClientHabits(clientId: string): Promise<CoachHabit[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("habits")
+    .select("id, name, icon, active")
+    .eq("client_id", clientId)
+    .order("name", { ascending: true });
+
+  return data ?? [];
+}
+
 // ---------------------------------------------------- Coach: client detail
 export async function getClientDetailForCoach(clientId: string) {
   const supabase = await createClient();

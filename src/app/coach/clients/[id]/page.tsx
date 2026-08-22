@@ -4,13 +4,14 @@ import { ArrowLeft, Dumbbell } from "lucide-react";
 import { Card, CardHeading } from "@/components/ui/Card";
 import { WeightChart } from "@/components/client/WeightChart";
 import { CheckInReviewList } from "@/components/coach/CheckInReviewList";
+import { HabitManager } from "@/components/coach/HabitManager";
 import { requireProfile } from "@/lib/auth";
-import { getClientDetailForCoach } from "@/lib/data";
+import { getClientDetailForCoach, getClientHabits } from "@/lib/data";
 
 export default async function ClientDetailPage(props: PageProps<"/coach/clients/[id]">) {
   await requireProfile("coach");
   const { id } = await props.params;
-  const detail = await getClientDetailForCoach(id);
+  const [detail, habits] = await Promise.all([getClientDetailForCoach(id), getClientHabits(id)]);
   if (!detail) notFound();
 
   const { profile, weightHistory, checkIns, habitAdherence, habitCount, assignedProgram } = detail;
@@ -79,6 +80,8 @@ export default async function ClientDetailPage(props: PageProps<"/coach/clients/
           </span>
         </div>
       </Card>
+
+      <HabitManager clientId={id} initialHabits={habits} />
 
       <div>
         <h2 className="mb-3 text-sm font-semibold text-[var(--color-charcoal)]/70">Check-ins</h2>

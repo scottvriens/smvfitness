@@ -17,6 +17,12 @@ create table if not exists program_phases (
 
 alter table workout_days add column if not exists phase_id uuid references program_phases(id) on delete cascade;
 
+-- The OLD policies on workout_days/exercises reference workout_days.program_id
+-- in their USING clause, so Postgres won't let that column be dropped while
+-- they still exist — drop them first, before touching the column.
+drop policy if exists "workout_days_select_client" on workout_days;
+drop policy if exists "exercises_select_client" on exercises;
+
 -- Clear old test data: exercises cascade-delete with workout_days, but we
 -- delete both explicitly for clarity.
 delete from exercises;
@@ -41,7 +47,6 @@ create policy "phases_select_client" on program_phases for select
     where pa.program_id = program_phases.program_id and pa.client_id = auth.uid()
   ));
 
-drop policy if exists "workout_days_select_client" on workout_days;
 create policy "workout_days_select_client" on workout_days for select
   using (exists (
     select 1 from program_phases pp
@@ -49,7 +54,6 @@ create policy "workout_days_select_client" on workout_days for select
     where pp.id = workout_days.phase_id and pa.client_id = auth.uid()
   ));
 
-drop policy if exists "exercises_select_client" on exercises;
 create policy "exercises_select_client" on exercises for select
   using (exists (
     select 1 from workout_days wd

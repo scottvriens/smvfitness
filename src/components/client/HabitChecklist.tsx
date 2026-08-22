@@ -1,17 +1,41 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Beef, Moon, Footprints, GlassWater, Ban, type LucideIcon } from "lucide-react";
+import {
+  Check,
+  Beef,
+  Moon,
+  Footprints,
+  GlassWater,
+  Ban,
+  Dumbbell,
+  Apple,
+  Sun,
+  BookOpen,
+  Pill,
+  Coffee,
+  Smile,
+  type LucideIcon,
+} from "lucide-react";
 import { Card, CardHeading } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { createClient } from "@/lib/supabase/client";
 
+// Keep these keys in sync with ICON_OPTIONS in
+// components/coach/HabitManager.tsx — that's where a coach picks one.
 const iconMap: Record<string, LucideIcon> = {
   Beef,
   Moon,
   Footprints,
   GlassWater,
   Ban,
+  Dumbbell,
+  Apple,
+  Sun,
+  BookOpen,
+  Pill,
+  Coffee,
+  Smile,
 };
 
 export interface TodayHabit {
