@@ -172,7 +172,7 @@ export async function getClientDetailForCoach(clientId: string) {
     supabase.from("habits").select("id").eq("client_id", clientId).eq("active", true),
     supabase
       .from("program_assignments")
-      .select("programs(id, name, week_label)")
+      .select("programs(id, name)")
       .eq("client_id", clientId)
       .order("start_date", { ascending: false })
       .limit(1)
@@ -199,7 +199,7 @@ export async function getClientDetailForCoach(clientId: string) {
   // Supabase returns the embedded relation as an object here since we scoped
   // to a single assignment row; cast past the array-shaped type it infers.
   const assignedProgram =
-    (assignment?.programs as unknown as { id: string; name: string; week_label: string } | null) ?? null;
+    (assignment?.programs as unknown as { id: string; name: string } | null) ?? null;
 
   return {
     profile,
@@ -216,8 +216,9 @@ export interface ProgramListItem {
   id: string;
   name: string;
   description: string;
-  week_label: string;
+  phase_count: number;
   day_count: number;
+  total_weeks: number;
   assigned_count: number;
 }
 
@@ -225,17 +226,23 @@ export async function getPrograms(): Promise<ProgramListItem[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("programs")
-    .select("id, name, description, week_label, created_at, workout_days(id), program_assignments(id)")
+    .select(
+      "id, name, description, created_at, program_phases(id, duration_weeks, workout_days(id)), program_assignments(id)"
+    )
     .order("created_at", { ascending: false });
 
-  return (data ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    week_label: p.week_label,
-    day_count: (p.workout_days as { id: string }[] | null)?.length ?? 0,
-    assigned_count: (p.program_assignments as { id: string }[] | null)?.length ?? 0,
-  }));
+  return (data ?? []).map((p) => {
+    const phases = (p.program_phases as { id: string; duration_weeks: number; workout_days: { id: string }[] }[] | null) ?? [];
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      phase_count: phases.length,
+      day_count: phases.reduce((sum, ph) => sum + (ph.workout_days?.length ?? 0), 0),
+      total_weeks: phases.reduce((sum, ph) => sum + (ph.duration_weeks ?? 0), 0),
+      assigned_count: (p.program_assignments as { id: string }[] | null)?.length ?? 0,
+    };
+  });
 }
 
 export interface EditableExerciseRow {
@@ -256,21 +263,33 @@ export interface EditableDayRow {
   exercises: EditableExerciseRow[];
 }
 
+export interface EditablePhaseRow {
+  id: string;
+  phase_label: string;
+  phase_index: number;
+  duration_weeks: number;
+  days: EditableDayRow[];
+}
+
 export interface ProgramDetail {
   id: string;
   name: string;
   description: string;
-  week_label: string;
-  days: EditableDayRow[];
+  phases: EditablePhaseRow[];
   assignedClientIds: string[];
 }
 
 export async function getProgramDetail(programId: string): Promise<ProgramDetail | null> {
   const supabase = await createClient();
+  // Nested embed is safe here (unlike the client-facing query below) — this
+  // is a coach-only read, gated by the simple non-correlated is_coach() check
+  // at every level, with no shadowing risk from a correlated subquery.
   const [{ data: program }, { data: assignments }] = await Promise.all([
     supabase
       .from("programs")
-      .select("id, name, description, week_label, workout_days(id, day_label, day_index, exercises(*))")
+      .select(
+        "id, name, description, program_phases(id, phase_label, phase_index, duration_weeks, days:workout_days(id, day_label, day_index, exercises(*)))"
+      )
       .eq("id", programId)
       .maybeSingle(),
     supabase.from("program_assignments").select("client_id").eq("program_id", programId),
@@ -278,22 +297,27 @@ export async function getProgramDetail(programId: string): Promise<ProgramDetail
 
   if (!program) return null;
 
-  const days = ((program.workout_days as EditableDayRow[] | null) ?? [])
+  const phases = ((program.program_phases as EditablePhaseRow[] | null) ?? [])
     .slice()
-    .sort((a, b) => a.day_index - b.day_index)
-    .map((d) => ({
-      ...d,
-      exercises: (d.exercises as unknown as EditableExerciseRow[])
+    .sort((a, b) => a.phase_index - b.phase_index)
+    .map((p) => ({
+      ...p,
+      days: (p.days as unknown as EditableDayRow[])
         .slice()
-        .sort((a, b) => a.order_index - b.order_index),
+        .sort((a, b) => a.day_index - b.day_index)
+        .map((d) => ({
+          ...d,
+          exercises: (d.exercises as unknown as EditableExerciseRow[])
+            .slice()
+            .sort((a, b) => a.order_index - b.order_index),
+        })),
     }));
 
   return {
     id: program.id,
     name: program.name,
     description: program.description,
-    week_label: program.week_label,
-    days,
+    phases,
     assignedClientIds: (assignments ?? []).map((a) => a.client_id as string),
   };
 }
@@ -332,26 +356,58 @@ export interface ClientProgramDay {
   exercises: ClientProgramExercise[];
 }
 
+export interface ClientProgramPhase {
+  id: string;
+  phase_label: string;
+  phase_index: number;
+  duration_weeks: number;
+  days: ClientProgramDay[];
+}
+
 export interface ClientProgram {
   name: string;
   description: string;
-  week_label: string;
-  days: ClientProgramDay[];
+  phases: ClientProgramPhase[];
+  currentPhaseId: string | null;
+}
+
+// Which phase is "now" for this client, purely from elapsed time since the
+// program was assigned versus each phase's duration — e.g. assigned 9 weeks
+// ago, phase 1 is 8 weeks, phase 2 is 8 weeks -> 9 weeks lands 1 week into
+// phase 2. Once elapsed time runs past every phase, they stay parked on the
+// last one rather than falling off the end.
+function computeCurrentPhaseId(
+  phases: { id: string; phase_index: number; duration_weeks: number }[],
+  startDate: string
+): string | null {
+  if (phases.length === 0) return null;
+  const sorted = phases.slice().sort((a, b) => a.phase_index - b.phase_index);
+
+  const start = new Date(startDate + "T00:00:00Z").getTime();
+  const now = Date.now();
+  const elapsedWeeks = Math.max(0, Math.floor((now - start) / (7 * 24 * 60 * 60 * 1000)));
+
+  let cumulative = 0;
+  for (const phase of sorted) {
+    cumulative += Math.max(phase.duration_weeks, 0);
+    if (elapsedWeeks < cumulative) return phase.id;
+  }
+  return sorted[sorted.length - 1].id;
 }
 
 export async function getClientProgram(clientId: string): Promise<ClientProgram | null> {
   const supabase = await createClient();
 
   // Deliberately flat, sequential queries rather than one deep nested
-  // PostgREST embed (program_assignments -> programs -> workout_days ->
-  // exercises) — a 3-level embed relying on RLS exists-subqueries at every
-  // level turned out to unreliably return nothing even when the data and
-  // policies were correct, so each step below is its own simple, RLS-checked
-  // query, matching the pattern the rest of this file already uses.
-  // Plain selects only, sorted/picked in JS — chaining .order()/.limit()/
-  // .maybeSingle() onto this specific query was silently coming back empty
-  // even with correct data and RLS, so we stick to the simplest possible
-  // query shape here rather than trust the fancier chain.
+  // PostgREST embed (program_assignments -> programs -> program_phases ->
+  // workout_days -> exercises) — a 3-level embed relying on RLS exists-
+  // subqueries at every level turned out to unreliably return nothing even
+  // when the data and policies were correct, so each step below is its own
+  // simple, RLS-checked query, matching the pattern the rest of this file
+  // already uses. Plain selects only, sorted/picked in JS — chaining
+  // .order()/.limit()/.maybeSingle() onto this specific query was silently
+  // coming back empty even with correct data and RLS, so we stick to the
+  // simplest possible query shape here rather than trust the fancier chain.
   const { data: assignments, error: assignmentError } = await supabase
     .from("program_assignments")
     .select("program_id, start_date")
@@ -363,21 +419,33 @@ export async function getClientProgram(clientId: string): Promise<ClientProgram 
 
   const { data: programs, error: programError } = await supabase
     .from("programs")
-    .select("name, description, week_label")
+    .select("name, description")
     .eq("id", assignment.program_id);
   if (programError) console.error("getClientProgram: program lookup failed", programError);
   const program = programs?.[0];
   if (!program) return null;
 
+  const { data: phaseRows, error: phasesError } = await supabase
+    .from("program_phases")
+    .select("id, phase_label, phase_index, duration_weeks")
+    .eq("program_id", assignment.program_id)
+    .order("phase_index", { ascending: true });
+  if (phasesError) console.error("getClientProgram: program_phases lookup failed", phasesError);
+  const phases = phaseRows ?? [];
+  if (phases.length === 0) {
+    return { name: program.name, description: program.description, phases: [], currentPhaseId: null };
+  }
+
+  const phaseIds = phases.map((p) => p.id);
   const { data: days, error: daysError } = await supabase
     .from("workout_days")
-    .select("id, day_label, day_index")
-    .eq("program_id", assignment.program_id)
+    .select("id, day_label, day_index, phase_id")
+    .in("phase_id", phaseIds)
     .order("day_index", { ascending: true });
   if (daysError) console.error("getClientProgram: workout_days lookup failed", daysError);
 
   const dayIds = (days ?? []).map((d) => d.id);
-  let exercises: EditableExerciseRow[] = [];
+  let exercises: (EditableExerciseRow & { workout_day_id: string })[] = [];
   if (dayIds.length > 0) {
     const { data: exerciseRows, error: exercisesError } = await supabase
       .from("exercises")
@@ -390,8 +458,7 @@ export async function getClientProgram(clientId: string): Promise<ClientProgram 
 
   const exercisesByDay = new Map<string, ClientProgramExercise[]>();
   exercises.forEach((e) => {
-    const workoutDayId = (e as unknown as { workout_day_id: string }).workout_day_id;
-    const list = exercisesByDay.get(workoutDayId) ?? [];
+    const list = exercisesByDay.get(e.workout_day_id) ?? [];
     list.push({
       id: e.id,
       name: e.name,
@@ -401,18 +468,29 @@ export async function getClientProgram(clientId: string): Promise<ClientProgram 
       target_rpe: e.target_rpe,
       rest_seconds: e.rest_seconds,
     });
-    exercisesByDay.set(workoutDayId, list);
+    exercisesByDay.set(e.workout_day_id, list);
   });
+
+  const daysByPhase = new Map<string, ClientProgramDay[]>();
+  (days ?? []).forEach((d) => {
+    const list = daysByPhase.get(d.phase_id) ?? [];
+    list.push({ id: d.id, day_label: d.day_label, exercises: exercisesByDay.get(d.id) ?? [] });
+    daysByPhase.set(d.phase_id, list);
+  });
+
+  const clientPhases: ClientProgramPhase[] = phases.map((p) => ({
+    id: p.id,
+    phase_label: p.phase_label,
+    phase_index: p.phase_index,
+    duration_weeks: p.duration_weeks,
+    days: daysByPhase.get(p.id) ?? [],
+  }));
 
   return {
     name: program.name,
     description: program.description,
-    week_label: program.week_label,
-    days: (days ?? []).map((d) => ({
-      id: d.id,
-      day_label: d.day_label,
-      exercises: exercisesByDay.get(d.id) ?? [],
-    })),
+    phases: clientPhases,
+    currentPhaseId: computeCurrentPhaseId(phases, assignment.start_date),
   };
 }
 

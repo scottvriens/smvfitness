@@ -59,13 +59,23 @@ create table if not exists programs (
   coach_id uuid not null references profiles(id) on delete cascade,
   name text not null,
   description text not null default '',
-  week_label text not null default '',
   created_at timestamptz not null default now()
+);
+
+-- A program is made of one or more phases (Trainerize-style), each with its
+-- own label and duration in weeks. Fully flexible — not locked to a fixed
+-- pattern like "2 phases of 8 weeks" even though that's the common case.
+create table if not exists program_phases (
+  id uuid primary key default gen_random_uuid(),
+  program_id uuid not null references programs(id) on delete cascade,
+  phase_label text not null,
+  phase_index int not null default 0,
+  duration_weeks int not null default 4
 );
 
 create table if not exists workout_days (
   id uuid primary key default gen_random_uuid(),
-  program_id uuid not null references programs(id) on delete cascade,
+  phase_id uuid not null references program_phases(id) on delete cascade,
   day_label text not null,
   day_index int not null default 0
 );
@@ -176,6 +186,7 @@ create table if not exists messages (
 -- ============================================================
 alter table profiles enable row level security;
 alter table programs enable row level security;
+alter table program_phases enable row level security;
 alter table workout_days enable row level security;
 alter table exercises enable row level security;
 alter table program_assignments enable row level security;
@@ -196,19 +207,36 @@ drop policy if exists "profiles_update_own" on profiles;
 create policy "profiles_update_own" on profiles for update
   using (id = auth.uid());
 
--- programs / workout_days / exercises: coach manages, clients read what's assigned to them
+-- programs / program_phases / workout_days / exercises: coach manages, clients read what's assigned to them.
+-- Every correlated subquery below explicitly qualifies EVERY outer-table
+-- column reference (e.g. `pa.program_id = program_phases.program_id`, never
+-- a bare `program_id`) — an unqualified reference resolves to the closest
+-- FROM table in scope, which silently produced an always-false policy here
+-- once before (programs_select_client resolved a bare `id` to the join
+-- table's own `id` instead of the outer table's). Never repeat that.
 drop policy if exists "programs_all_coach" on programs;
 create policy "programs_all_coach" on programs for all using (is_coach()) with check (is_coach());
 drop policy if exists "programs_select_client" on programs;
 create policy "programs_select_client" on programs for select
   using (exists (select 1 from program_assignments pa where pa.program_id = programs.id and pa.client_id = auth.uid()));
 
+drop policy if exists "phases_all_coach" on program_phases;
+create policy "phases_all_coach" on program_phases for all using (is_coach()) with check (is_coach());
+drop policy if exists "phases_select_client" on program_phases;
+create policy "phases_select_client" on program_phases for select
+  using (exists (
+    select 1 from program_assignments pa
+    where pa.program_id = program_phases.program_id and pa.client_id = auth.uid()
+  ));
+
 drop policy if exists "workout_days_all_coach" on workout_days;
 create policy "workout_days_all_coach" on workout_days for all using (is_coach()) with check (is_coach());
 drop policy if exists "workout_days_select_client" on workout_days;
 create policy "workout_days_select_client" on workout_days for select
   using (exists (
-    select 1 from program_assignments pa where pa.program_id = workout_days.program_id and pa.client_id = auth.uid()
+    select 1 from program_phases pp
+    join program_assignments pa on pa.program_id = pp.program_id
+    where pp.id = workout_days.phase_id and pa.client_id = auth.uid()
   ));
 
 drop policy if exists "exercises_all_coach" on exercises;
@@ -217,7 +245,8 @@ drop policy if exists "exercises_select_client" on exercises;
 create policy "exercises_select_client" on exercises for select
   using (exists (
     select 1 from workout_days wd
-    join program_assignments pa on pa.program_id = wd.program_id
+    join program_phases pp on pp.id = wd.phase_id
+    join program_assignments pa on pa.program_id = pp.program_id
     where wd.id = exercises.workout_day_id and pa.client_id = auth.uid()
   ));
 

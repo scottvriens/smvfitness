@@ -50,9 +50,6 @@ export default async function ClientDetailPage(props: PageProps<"/coach/clients/
         {assignedProgram ? (
           <div>
             <p className="text-sm font-medium text-[var(--color-charcoal)]">{assignedProgram.name}</p>
-            {assignedProgram.week_label && (
-              <p className="mt-0.5 text-xs text-[var(--color-charcoal)]/50">{assignedProgram.week_label}</p>
-            )}
           </div>
         ) : (
           <p className="text-sm text-[var(--color-charcoal)]/55">No program assigned yet.</p>

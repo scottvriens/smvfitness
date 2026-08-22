@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Dumbbell, Users } from "lucide-react";
+import { Plus, Dumbbell, Users, Layers } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { requireProfile } from "@/lib/auth";
 import { getPrograms } from "@/lib/data";
@@ -49,6 +49,10 @@ export default async function ProgramsPage() {
                     )}
                     <div className="mt-2.5 flex items-center gap-3.5 text-xs text-[var(--color-charcoal)]/50">
                       <span className="flex items-center gap-1">
+                        <Layers size={13} />
+                        {program.phase_count} {program.phase_count === 1 ? "phase" : "phases"}
+                      </span>
+                      <span className="flex items-center gap-1">
                         <Dumbbell size={13} />
                         {program.day_count} {program.day_count === 1 ? "day" : "days"}
                       </span>
@@ -56,7 +60,7 @@ export default async function ProgramsPage() {
                         <Users size={13} />
                         {program.assigned_count} assigned
                       </span>
-                      {program.week_label && <span>{program.week_label}</span>}
+                      {program.total_weeks > 0 && <span>{program.total_weeks} wks total</span>}
                     </div>
                   </div>
                 </div>

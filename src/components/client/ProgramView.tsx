@@ -6,8 +6,8 @@ import clsx from "clsx";
 import { Card, CardHeading } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/client";
 import type {
-  ClientProgramDay,
   ClientProgramExercise,
+  ClientProgramPhase,
   LoggedExercise,
   LoggedSet,
   PreviousExerciseResult,
@@ -23,18 +23,20 @@ function buildDefaultSets(exercise: ClientProgramExercise): LoggedSet[] {
 }
 
 function buildInitialLogs(
-  days: ClientProgramDay[],
+  phases: ClientProgramPhase[],
   todayLogs: Record<string, LoggedExercise[]>
 ): Record<string, DayLogs> {
   const result: Record<string, DayLogs> = {};
-  for (const day of days) {
-    const existing = todayLogs[day.id] ?? [];
-    const byExerciseId = new Map(existing.map((e) => [e.exercise_id, e.sets]));
-    const dayLogs: DayLogs = {};
-    for (const ex of day.exercises) {
-      dayLogs[ex.id] = byExerciseId.get(ex.id) ?? buildDefaultSets(ex);
+  for (const phase of phases) {
+    for (const day of phase.days) {
+      const existing = todayLogs[day.id] ?? [];
+      const byExerciseId = new Map(existing.map((e) => [e.exercise_id, e.sets]));
+      const dayLogs: DayLogs = {};
+      for (const ex of day.exercises) {
+        dayLogs[ex.id] = byExerciseId.get(ex.id) ?? buildDefaultSets(ex);
+      }
+      result[day.id] = dayLogs;
     }
-    result[day.id] = dayLogs;
   }
   return result;
 }
@@ -47,21 +49,32 @@ function formatRest(seconds: number) {
 }
 
 export function ProgramView({
-  days,
+  phases,
+  currentPhaseId,
   clientId,
   previousWeights,
   todayLogs,
 }: {
-  days: ClientProgramDay[];
+  phases: ClientProgramPhase[];
+  currentPhaseId: string | null;
   clientId: string;
   previousWeights: Record<string, PreviousExerciseResult>;
   todayLogs: Record<string, LoggedExercise[]>;
 }) {
-  const [activeDay, setActiveDay] = useState(0);
-  const [logs, setLogs] = useState<Record<string, DayLogs>>(() => buildInitialLogs(days, todayLogs));
+  const [activePhaseId, setActivePhaseId] = useState(currentPhaseId ?? phases[0]?.id ?? "");
+  const [activeDayId, setActiveDayId] = useState<string | null>(null);
+  const [logs, setLogs] = useState<Record<string, DayLogs>>(() => buildInitialLogs(phases, todayLogs));
 
-  const day = days[activeDay];
+  const phase = phases.find((p) => p.id === activePhaseId) ?? phases[0];
+  if (!phase) return null;
+
+  const day = phase.days.find((d) => d.id === activeDayId) ?? phase.days[0];
   if (!day) return null;
+
+  const selectPhase = (phaseId: string) => {
+    setActivePhaseId(phaseId);
+    setActiveDayId(null); // reset to that phase's first day
+  };
 
   const updateSet = (exerciseId: string, setIndex: number, patch: Partial<LoggedSet>) => {
     setLogs((prev) => {
@@ -95,14 +108,34 @@ export function ProgramView({
 
   return (
     <div className="space-y-4">
+      {phases.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {phases.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => selectPhase(p.id)}
+              className={clsx(
+                "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                p.id === phase.id
+                  ? "bg-[var(--color-charcoal)] text-white"
+                  : "bg-white text-[var(--color-charcoal)]/65 border border-[var(--color-taupe)]"
+              )}
+            >
+              {p.phase_label}
+              {p.id === currentPhaseId ? " · now" : ""}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {days.map((d, i) => (
+        {phase.days.map((d) => (
           <button
             key={d.id}
-            onClick={() => setActiveDay(i)}
+            onClick={() => setActiveDayId(d.id)}
             className={clsx(
               "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors",
-              i === activeDay
+              d.id === day.id
                 ? "bg-[var(--color-sage)] text-white"
                 : "bg-white text-[var(--color-charcoal)]/65 border border-[var(--color-taupe)]"
             )}
@@ -113,7 +146,10 @@ export function ProgramView({
       </div>
 
       <Card>
-        <CardHeading title={day.day_label} subtitle={`${day.exercises.length} exercises`} />
+        <CardHeading
+          title={day.day_label}
+          subtitle={`${phase.phase_label} · ${day.exercises.length} exercises`}
+        />
         {day.exercises.length === 0 ? (
           <p className="text-sm text-[var(--color-charcoal)]/55">No exercises added to this day yet.</p>
         ) : (
